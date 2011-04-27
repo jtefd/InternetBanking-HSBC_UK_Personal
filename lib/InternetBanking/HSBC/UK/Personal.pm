@@ -60,8 +60,12 @@ sub login() {
         'FOURTH' => 4,
         'FIFTH' => 5,
         'SIXTH' => 6,
-        'NEXT TO LAST' => 5,
-        'LAST' => 6
+        'SEVENTH' => 7,
+        'EIGHTH' => 8,
+        'NINTH' => 9,
+        'TENTH' => 10,
+        'NEXT TO LAST' => length($self->{_SECRET}) - 1,
+        'LAST' => length($self->{_SECRET})
     );
     
     my @pass = ();
@@ -104,7 +108,7 @@ sub getAccounts() {
 	my ($self) = @_;
 	
 	$self->{_C}->get($self->{_HOME});
-	$self->{_C}->follow_link(text => 'Show All');
+	#$self->{_C}->follow_link(text => 'Show All');
 	
 	my $html = HTML::TreeBuilder->new_from_content($self->{_C}->content);
 	
@@ -139,9 +143,6 @@ sub getAccounts() {
             }
         }
 	}
-	
-	use Data::Dumper;
-	print Dumper $accounts;
 	
 	return $accounts;
 }
@@ -188,6 +189,10 @@ sub getTransactions($;%) {
 	   Nov => '11',
 	   Dec => '12'
 	);
+	
+	unless ($date_map{$fm}) {
+		return undef;
+	}
 	
 	$fm = $date_map{$fm};
 	
@@ -236,6 +241,16 @@ sub logoff() {
     $self->{_C}->get($self->{_HOME});
     
     $self->{_C}->follow_link(text => 'Log off');
+}
+
+sub dump() {
+	my ($self) = @_;
+	
+	my $filename = sprintf('%s.html', time);
+	
+	open FILE, ">$filename";
+	print FILE $self->{_C}->content;
+	close FILE;
 }
 
 1;
