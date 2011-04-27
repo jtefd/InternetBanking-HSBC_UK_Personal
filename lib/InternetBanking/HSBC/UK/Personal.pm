@@ -6,6 +6,7 @@ use strict;
 
 use Carp;
 use HTML::TreeBuilder;
+use POSIX qw/strftime/;
 use WWW::Mechanize;
 
 use constant WEBAPP_URL => qw(http://www.hsbc.co.uk/1/2/personal);
@@ -94,29 +95,147 @@ sub login() {
         confess 'FAILED LOGGING IN';
     }
     
-    $self->{_C}->follow_link(text => 'Show All');
+    $self->{_HOME} = $self->{_C}->uri()->as_string();
         
-    return 1;
+    return $self->{_C};
+}
+
+sub getAccounts() {
+	my ($self) = @_;
+	
+	$self->{_C}->get($self->{_HOME});
+	$self->{_C}->follow_link(text => 'Show All');
+	
+	my $html = HTML::TreeBuilder->new_from_content($self->{_C}->content);
+	
+	my $accounts = {};
+	
+	foreach ($html->look_down('_tag', 'div', 'class', 'extContentHighlightPib hsbcCol')) {
+        foreach ($_->look_down('_tag', 'tr')) {
+        	my $key;
+        	
+            foreach ($_->look_down('_tag', 'div', 'class', 'col2 rowNo1')) {    
+                my $account_number = $_->as_trimmed_text();
+                
+                $key = $account_number;
+                $key =~ s/[^\d]//g;
+                
+                $accounts->{$key}->{_ACCOUNT_NUMBER} = $account_number;
+                last;   
+            }
+            
+            foreach ($_->look_down('_tag', 'input', 'type', 'submit')) {
+            	if ($key) {
+            	   $accounts->{$key}->{_NAME} = $_->attr('value');
+            	   last;	
+            	}    
+            }
+            
+            foreach ($_->look_down('_tag', 'div', 'class', 'col3 rowNo1 rightAlign')) {    
+                if ($key) {
+                	$accounts->{$key}->{_BALANCE} = $_->as_trimmed_text();
+                	last; 
+                }
+            }
+        }
+	}
+	
+	use Data::Dumper;
+	print Dumper $accounts;
+	
+	return $accounts;
+}
+
+sub getTransactions($;%) {
+	my ($self, $acc_number, %opts) = @_;
+
+    my $acc_url = sprintf(
+        '%s://%s/1/2/personal/internet-banking/recent-transaction',
+        $self->{_C}->uri()->scheme(),
+        $self->{_C}->uri()->host()
+    );
+	
+	$self->{_C}->post($acc_url, 
+	   {
+	       BlitzToken => 'blitz', 
+	       ActiveAccountKey => $acc_number
+	   }
+	);
+	
+	my $html = HTML::TreeBuilder->new_from_content($self->{_C}->content);
+	
+	my ($fd, $fm, $fy) = ();
+	
+	foreach ($html->look_down('_tag', 'div', 'class', 'extPibRow hsbcRow')) {
+		foreach ($_->look_down('_tag', 'p')) {
+			if (($fd, $fm, $fy) = ($_->as_trimmed_text() =~ /The earliest date you can view is.+(\d{2}) (\w{3}) (\d{4})\./)) {
+				last;
+			}
+		}
+	}
+	
+	my %date_map = (
+	   Jan => '01',
+	   Feb => '02',
+	   Mar => '03',
+	   Apr => '04',
+	   May => '05',
+	   Jun => '06',
+	   Jul => '07',
+	   Aug => '08',
+	   Sep => '09',
+	   Oct => '10',
+	   Nov => '11',
+	   Dec => '12'
+	);
+	
+	$fm = $date_map{$fm};
+	
+	my ($td, $tm, $ty) = split(' ', strftime('%d %m %Y', localtime));
+	
+	$self->{_C}->submit_form(
+	   with_fields => {
+	       fromDateDay => $fd,
+	       fromDateMonth => $fm,
+	       fromDateYear => $fy,
+	       toDateDay => $td,
+	       toDateMonth => $tm,
+	       toDateYear => $ty
+	   }
+    );
+    
+    $self->{_C}->follow_link(text => 'Download transactions');
+    
+    my %formats = (
+        csv => 'S_Text',
+        qif => 'Q_QIF'
+    );
+    
+    my $format = 'S_Text';
+    
+    if ($opts{'format'} && $formats{lc($opts{'format'})}) {
+    	$format = $formats{lc($opts{'format'})};
+    }
+    
+    $self->{_C}->submit_form(
+       with_fields => {
+           downloadType => $format
+       }
+    );
+    
+    $self->{_C}->form_with_fields( qw/fileKey token/ );
+    
+    $self->{_C}->click_button(value => 'Confirm');
+    
+    return $self->{_C}->content();
 }
 
 sub logoff() {
     my ($self) = @_;
     
+    $self->{_C}->get($self->{_HOME});
+    
     $self->{_C}->follow_link(text => 'Log off');
-}
-
-sub getAccounts() {
-    my ($self) = @_;
-    
-    
-}
-
-sub dump() {
-    my ($self) = @_;
-    
-    open FILE, '>', time . '.html';
-    print FILE $self->{_C}->content;
-    close FILE;
 }
 
 1;
