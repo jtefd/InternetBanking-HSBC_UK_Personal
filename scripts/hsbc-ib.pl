@@ -69,10 +69,15 @@ Show help (this screen)
 use strict;
 use warnings;
 
+use File::Basename qw/dirname/;
+use File::Path qw/mkpath/;
+use File::Spec::Functions qw/catfile/;
 use Getopt::Long;
 use InternetBanking::HSBC::UK::Personal;
 use Pod::Usage;
 use Term::ReadKey;
+
+use constant USER_AUTH_FILE => catfile($ENV{'HOME'}, '.hsbc-ib', 'auth');
 
 sub GetMaskedUserInput($) {
 	my ($msg) = @_;
@@ -84,6 +89,39 @@ sub GetMaskedUserInput($) {
     print STDERR "\n"; 
     
     return $result;
+}
+
+sub LoadUserAuth() {
+	my $auth = {};
+	
+	if (-f USER_AUTH_FILE) {
+        open FILE, USER_AUTH_FILE;
+    
+        while (<FILE>) {
+        	chomp;
+        	
+        	my ($k, $v) = split('=');
+        	
+        	$auth->{$k} = $v;
+        }
+    
+        close FILE;	
+	}
+	return $auth;
+}
+
+sub PersistUserAuth($$$) {
+	my ($id, $dob, $secret) = @_;
+	
+	unless (-d dirname(USER_AUTH_FILE)) {
+		mkpath(dirname(USER_AUTH_FILE));
+	}
+	
+	open FILE, '>' . USER_AUTH_FILE;
+	printf(FILE "id=%s\n", $id);
+	printf(FILE "dob=%s\n", $dob);
+	printf(FILE "secret=%s\n", $secret);
+	close FILE;
 }
 
 my %opts = ();
@@ -105,16 +143,37 @@ if ($opts{'help'}) {
 	pod2usage(-verbose => 1, -exitval => 0);
 }
 
+my $auth = LoadUserAuth();
+
 unless ($opts{'id'}) {
-	$opts{'id'} = GetMaskedUserInput('User ID: ');
+	if ($auth->{'id'}) {
+	   $opts{'id'} = $auth->{'id'};	
+	}
+	else {
+	   $opts{'id'} = GetMaskedUserInput('User ID: ');	
+	}
 }
 
 unless ($opts{'dob'}) {
-    $opts{'dob'} = GetMaskedUserInput('Date of birth (DDMMYY): ');
+	if ($auth->{'dob'}) {
+       $opts{'dob'} = $auth->{'dob'}; 
+    }
+    else {
+        $opts{'dob'} = GetMaskedUserInput('Date of birth (DDMMYY): ');	
+    }
 }
 
 unless ($opts{'secret'}) {
-    $opts{'secret'} = GetMaskedUserInput('Secret: ');
+	if ($auth->{'secret'}) {
+       $opts{'secret'} = $auth->{'secret'}; 
+    }
+    else {
+        $opts{'secret'} = GetMaskedUserInput('Secret: ');	
+    }
+}
+
+if ($opts{'save-profile'}) {
+	PersistUserAuth($opts{'id'}, $opts{'dob'}, $opts{'secret'});
 }
 
 my $ib = InternetBanking::HSBC::UK::Personal->new(
