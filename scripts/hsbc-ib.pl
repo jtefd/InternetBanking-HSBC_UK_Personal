@@ -72,6 +72,19 @@ use warnings;
 use Getopt::Long;
 use InternetBanking::HSBC::UK::Personal;
 use Pod::Usage;
+use Term::ReadKey;
+
+sub GetMaskedUserInput($) {
+	my ($msg) = @_;
+	
+	ReadMode('noecho');
+    print STDERR $msg;
+    chomp(my $result = <STDIN>);
+    ReadMode('restore');
+    print STDERR "\n"; 
+    
+    return $result;
+}
 
 my %opts = ();
 
@@ -93,18 +106,21 @@ if ($opts{'help'}) {
 }
 
 unless ($opts{'id'}) {
-	pod2usage(-verbose => 1, -exitval => 1);
+	$opts{'id'} = GetMaskedUserInput('User ID: ');
 }
 
 unless ($opts{'dob'}) {
-    pod2usage(-verbose => 1, -exitval => 1);
+    $opts{'dob'} = GetMaskedUserInput('Date of birth (DDMMYY): ');
 }
 
 unless ($opts{'secret'}) {
-    pod2usage(-verbose => 1, -exitval => 1);
+    $opts{'secret'} = GetMaskedUserInput('Secret: ');
 }
 
-my $ib = InternetBanking::HSBC::UK::Personal->new(id => $opts{'id'}, dob => $opts{'dob'}, secret => $opts{'secret'});
+my $ib = InternetBanking::HSBC::UK::Personal->new(
+    id => $opts{'id'}, dob => $opts{'dob'}, secret => $opts{'secret'}
+);
+
 $ib->login();
 
 if ($opts{'show-accounts'}) {
