@@ -3,4 +3,5 @@ Makefile.PL
 MANIFEST
 README
 t/InternetBanking-HSBC_UK_Personal.t
-lib/InternetBanking-HSBC_UK_Personal.pm
+lib/InternetBanking/HSBC/UK/Personal.pm
+scripts/hsbc-ib.pl

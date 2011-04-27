@@ -1,6 +1,6 @@
-Revision history for Perl extension InternetBanking-HSBC_UK_Personal.
+Revision history for Perl extension InternetBanking-HSBC-UK-Personal.
 
-0.01  Tue Apr 26 15:38:16 2011
+0.0.1  Tue Apr 26 15:38:16 2011
 	- original version; created by h2xs 1.23 with options
 		-A -X -n InternetBanking-HSBC_UK_Personal
 

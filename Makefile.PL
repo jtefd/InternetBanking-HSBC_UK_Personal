@@ -1,12 +1,12 @@
 use 5.010001;
 use ExtUtils::MakeMaker;
-# See lib/ExtUtils/MakeMaker.pm for details of how to influence
-# the contents of the Makefile that is written.
+
 WriteMakefile(
-    NAME              => 'InternetBanking-HSBC_UK_Personal',
-    VERSION_FROM      => 'lib/InternetBanking-HSBC_UK_Personal.pm', # finds $VERSION
+    NAME              => 'InternetBanking-HSBC-UK-Personal',
+    VERSION_FROM      => 'lib/InternetBanking/HSBC/UK/Personal.pm',
     PREREQ_PM         => {}, # e.g., Module::Name => 1.1
     ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
-      (ABSTRACT_FROM  => 'lib/InternetBanking-HSBC_UK_Personal.pm', # retrieve abstract from module
-       AUTHOR         => 'James Telford <james@>') : ()),
+      (ABSTRACT       => 'Module for interacting with HSBC UK personal internet banking',
+       AUTHOR         => 'James Telford <james@tefd.co.uk>') : ()),
+    EXE_FILES         => [ 'scripts/hsbc-ib.pl' ],
 );
