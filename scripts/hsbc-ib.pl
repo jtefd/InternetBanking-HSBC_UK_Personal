@@ -18,6 +18,8 @@ hsbc-ib --id <ID> --dob <DOB> --secret <SECRET> [options]
 
 =head2 REQUIRED
 
+If any of the following are not given, the user will be prompted to provide them
+
 =over 8
 
 =item B<--id> <ID>
@@ -58,11 +60,19 @@ Download statements for the given account only
 
 =back
 
+=item B<--save-auth>
+
+Save user authentication details to avoid having to provide them next time
+
 =item B<--help>
 
 Show help (this screen)
 
 =back
+
+=head1 AUTHOR
+
+James Telford (jtefd@cpan.org)
 
 =cut
 
@@ -135,7 +145,7 @@ GetOptions(
     'download-statements',
     'account=s',
     'format=s',
-    'save-profile',
+    'save-auth',
     'help|h|?'
 );
 
@@ -172,7 +182,7 @@ unless ($opts{'secret'}) {
     }
 }
 
-if ($opts{'save-profile'}) {
+if ($opts{'save-auth'}) {
 	PersistUserAuth($opts{'id'}, $opts{'dob'}, $opts{'secret'});
 }
 
