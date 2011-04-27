@@ -32,7 +32,11 @@ The user's date of birth
 
 The user's secret code for HSBC internet banking
 
+=back
+
 =head2 SWITCHES
+
+=over 8
 
 =item B<--show-accounts>
 
