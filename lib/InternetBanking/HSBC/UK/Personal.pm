@@ -9,6 +9,10 @@ use HTML::TreeBuilder;
 use POSIX qw/strftime/;
 use WWW::Mechanize;
 
+use vars qw/$VERSION/;
+
+$VERSION = '0.0.1';
+
 use constant WEBAPP_URL => qw(http://www.hsbc.co.uk/1/2/personal);
 
 sub new(%) {
