@@ -52,7 +52,7 @@ Download available statements for all accounts
 
 =item B<--format> <csv|qif>
 
-Download statements in the given format
+Download statements in the given format (defaults to qif)
 
 =item B<--account> <ACC_CODE>
 
@@ -200,6 +200,10 @@ if ($opts{'show-accounts'}) {
     }
 }
 elsif ($opts{'download-statements'}) {
+	unless ($opts{'format'}) {
+		$opts{'format'} = 'qif';
+	}
+	
     my $accounts = $ib->getAccounts();
     
 	while (my ($k, $acc) = each %{$accounts}) {
@@ -220,7 +224,7 @@ elsif ($opts{'download-statements'}) {
             my $txns = $ib->getTransactions($k, format => $opts{'format'});
             
             if ($txns) {
-                open FILE, ">$filename";
+                open FILE, '>' . $filename . '.' . $opts{'format'};
                 print FILE $txns;
                 close FILE;	
             }
