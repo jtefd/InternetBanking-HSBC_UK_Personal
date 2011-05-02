@@ -1,9 +1,5 @@
 #!/usr/bin/env perl
 
-BEGIN {
-    push @INC, '../lib';
-}
-
 =pod
 
 =head1 NAME
@@ -221,8 +217,8 @@ elsif ($opts{'download-statements'}) {
 		if ($flag) {
             my $filename = sprintf('%s_%s', $k, time);
             
-            my $txns = $ib->getTransactions($k, format => $opts{'format'});
-            
+            my $txns = $ib->getTransactions($acc, format => $opts{'format'});
+
             if ($txns) {
                 open FILE, '>' . $filename . '.' . $opts{'format'};
                 print FILE $txns;

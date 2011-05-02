@@ -145,6 +145,23 @@ sub getAccounts() {
                 	last; 
                 }
             }
+            
+            foreach ($_->look_down('_tag', 'form')) {
+                if ($key && $_->attr('action') =~ /transaction/) {
+                   
+                    my $form_data = {
+                       _PATH => $_->attr('action')
+                    };
+                   
+                    foreach ($_->look_down('_tag', 'input')) {
+                        $form_data->{_INPUTS}->{$_->attr('name')} = $_->attr('value');
+                    }
+                   
+                    $accounts->{$key}->{_FORM_DATA} = $form_data;
+                   
+                    last;
+                }
+            }
         }
 	}
 	
@@ -152,88 +169,108 @@ sub getAccounts() {
 }
 
 sub getTransactions($;%) {
-	my ($self, $acc_number, %opts) = @_;
-
+	my ($self, $account, %opts) = @_;
+	
+	my $cc_account;
+	
+	if ($account->{_FORM_DATA}->{_INPUTS}->{'productType'} && $account->{_FORM_DATA}->{_INPUTS}->{'productType'} eq 'CCA') {
+		$cc_account = 1;
+	}
+    
     my $acc_url = sprintf(
-        '%s://%s/1/2/personal/internet-banking/recent-transaction',
+        '%s://%s%s',
         $self->{_C}->uri()->scheme(),
-        $self->{_C}->uri()->host()
+        $self->{_C}->uri()->host(),
+        $account->{_FORM_DATA}->{_PATH}
     );
 	
-	$self->{_C}->post($acc_url, 
-	   {
-	       BlitzToken => 'blitz', 
-	       ActiveAccountKey => $acc_number
-	   }
-	);
+	$self->{_C}->post($acc_url, $account->{_FORM_DATA}->{_INPUTS});
 	
 	my $html = HTML::TreeBuilder->new_from_content($self->{_C}->content);
 	
-	my ($fd, $fm, $fy) = ();
+	unless ($cc_account) {
+		my ($fd, $fm, $fy) = ();
 	
-	foreach ($html->look_down('_tag', 'div', 'class', 'extPibRow hsbcRow')) {
-		foreach ($_->look_down('_tag', 'p')) {
-			if (($fd, $fm, $fy) = ($_->as_trimmed_text() =~ /The earliest date you can view is.+(\d{2}) (\w{3}) (\d{4})\./)) {
-				last;
+		foreach ($html->look_down('_tag', 'div', 'class', 'extPibRow hsbcRow')) {
+			foreach ($_->look_down('_tag', 'p')) {
+				if (($fd, $fm, $fy) = ($_->as_trimmed_text() =~ /The earliest date you can view is.+(\d{2}) (\w{3}) (\d{4})\./)) {
+					last;
+				}
 			}
 		}
-	}
-	
-	my %date_map = (
-	   Jan => '01',
-	   Feb => '02',
-	   Mar => '03',
-	   Apr => '04',
-	   May => '05',
-	   Jun => '06',
-	   Jul => '07',
-	   Aug => '08',
-	   Sep => '09',
-	   Oct => '10',
-	   Nov => '11',
-	   Dec => '12'
-	);
-	
-	unless ($date_map{$fm}) {
-		return undef;
-	}
-	
-	$fm = $date_map{$fm};
-	
-	my ($td, $tm, $ty) = split(' ', strftime('%d %m %Y', localtime));
-	
-	$self->{_C}->submit_form(
-	   with_fields => {
-	       fromDateDay => $fd,
-	       fromDateMonth => $fm,
-	       fromDateYear => $fy,
-	       toDateDay => $td,
-	       toDateMonth => $tm,
-	       toDateYear => $ty
-	   }
-    );
+		
+		my %date_map = (
+		   Jan => '01',
+		   Feb => '02',
+		   Mar => '03',
+		   Apr => '04',
+		   May => '05',
+		   Jun => '06',
+		   Jul => '07',
+		   Aug => '08',
+		   Sep => '09',
+		   Oct => '10',
+		   Nov => '11',
+		   Dec => '12'
+		);
+		
+		$fm = $date_map{$fm};
     
+        my ($td, $tm, $ty) = split(' ', strftime('%d %m %Y', localtime));
+    
+        $self->{_C}->submit_form(
+            with_fields => {
+                fromDateDay => $fd,
+                fromDateMonth => $fm,
+                fromDateYear => $fy,
+                toDateDay => $td,
+                toDateMonth => $tm,
+                toDateYear => $ty
+            }
+        );	
+	}
+	
     $self->{_C}->follow_link(text => 'Download transactions');
     
-    my %formats = (
-        csv => 'S_Text',
-        qif => 'Q_QIF'
-    );
+    my %formats = ();
     
-    my $format = 'S_Text';
+    if ($cc_account) {
+    	%formats = (
+        	csv => 'CSV1',
+        	qif => 'QIF2'
+    	);
+    }
+    else {
+    	%formats = (
+        	csv => 'S_Text',
+        	qif => 'Q_QIF'
+    	);
+    } 
+    
+    my $format = $formats{'csv'};
     
     if ($opts{'format'} && $formats{lc($opts{'format'})}) {
     	$format = $formats{lc($opts{'format'})};
     }
     
-    $self->{_C}->submit_form(
-       with_fields => {
-           downloadType => $format
-       }
-    );
-    
-    $self->{_C}->form_with_fields( qw/fileKey token/ );
-    
+    if ($cc_account) {
+    	$self->{_C}->form_with_fields( qw/formats transactionPeriodSelected es_iid/ );
+    	$self->{_C}->field('formats', $format);
+    	$self->{_C}->field('transactionPeriodSelected', 'CURRENTPERIOD');
+    	$self->{_C}->click();
+    	
+    	$self->{_C}->form_with_fields( qw/es_iid/ );
+    }
+    else {
+		$self->{_C}->submit_form(
+       		with_fields => {
+           		downloadType => $format
+       		}
+    	);
+    	
+    	$self->{_C}->form_with_fields( qw/fileKey token/ );
+    }
+  
     $self->{_C}->click_button(value => 'Confirm');
     
     return $self->{_C}->content();
