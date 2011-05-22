@@ -3,6 +3,7 @@
 package InternetBanking::HSBC::UK::Personal;
 
 use strict;
+use warnings;
 
 use Carp;
 use HTML::TreeBuilder;
@@ -11,17 +12,19 @@ use WWW::Mechanize;
 
 use vars qw/$VERSION/;
 
-$VERSION = '0.0.1';
+$VERSION = '0.0.2';
 
 use constant WEBAPP_URL => qw(http://www.hsbc.co.uk/1/2/personal);
 
 sub new(%) {
     my ($proto, %opts) = @_;
-    
+  
     my $class = ref $proto || $proto;
     
     unless ($opts{'id'} && $opts{'dob'} && $opts{'secret'}) {
-        confess 'MISSING AUTH DATA';
+        confess InternetBanking::HSBC::UK::Personal::Exception->new(
+        	InternetBanking::HSBC::UK::Personal::Exception->MISSING_AUTH
+        );
     }
     
     my $self = {
@@ -41,7 +44,9 @@ sub login() {
     
     # Get start page
     unless ($self->{_C}->get(WEBAPP_URL)) {
-        confess 'FAILED OPENING WEB APP';
+        confess InternetBanking::HSBC::UK::Personal::Exception->new(
+			InternetBanking::HSBC::UK::Personal::Exception->FAILED_WEB_CONNECTION
+		);
     }
     
     # Get Internet Banking login page
@@ -50,6 +55,7 @@ sub login() {
     # Get Internet Banking security page for user
     $self->{_C}->form_id('logonForm');
     $self->{_C}->field('userid', $self->{_USERID});
+    
     unless ($self->{_C}->click()) {
         confess 'FAILED OPENING ACCOUNT SECURITY PAGE';
     }
@@ -87,7 +93,9 @@ sub login() {
     }
 
     unless (scalar(@pass) == 3) {
-        confess 'FAILED DETERMINING ACCOUNT SECRET';
+        confess InternetBanking::HSBC::UK::Personal::Exception->new(
+			InternetBanking::HSBC::UK::Personal::Exception->UNKNOWN_EXCEPTION
+		);
     }
        
     $self->{_C}->form_with_fields( qw/password memorableAnswer/ );
@@ -95,13 +103,21 @@ sub login() {
     $self->{_C}->field('memorableAnswer', $self->{_DATEOFBIRTH});
     $self->{_C}->field('password', join('', @pass));
 
-    unless ($self->{_C}->click_button(value => 'Continue')) {
-        confess 'FAILED AUTHENTICATION';
-    }
+	eval {
+		$self->{_C}->click_button(value => 'Continue');
+	} or do {
+		confess InternetBanking::HSBC::UK::Personal::Exception->new(
+			InternetBanking::HSBC::UK::Personal::Exception->FAILED_AUTH
+		);
+	};
 
-    unless ($self->{_C}->follow_link(text => 'here')) {
-        confess 'FAILED LOGGING IN';
-    }
+	eval {
+		$self->{_C}->follow_link(text => 'here');	
+	} or do {
+		confess InternetBanking::HSBC::UK::Personal::Exception->new(
+			InternetBanking::HSBC::UK::Personal::Exception->FAILED_LOGIN
+		);	
+	};
     
     $self->{_HOME} = $self->{_C}->uri()->as_string();
         
@@ -217,7 +233,7 @@ sub getTransactions($;%) {
 		$fm = $date_map{$fm};
     
         my ($td, $tm, $ty) = split(' ', strftime('%d %m %Y', localtime));
-    
+        
         $self->{_C}->submit_form(
             with_fields => {
                 fromDateDay => $fd,
@@ -227,7 +243,7 @@ sub getTransactions($;%) {
                 toDateMonth => $tm,
                 toDateYear => $ty
             }
-        );	
+        );
 	}
 	
     $self->{_C}->follow_link(text => 'Download transactions');
@@ -258,7 +274,7 @@ sub getTransactions($;%) {
     	$self->{_C}->field('formats', $format);
     	$self->{_C}->field('transactionPeriodSelected', 'CURRENTPERIOD');
     	$self->{_C}->click();
-    	
+  
     	$self->{_C}->form_with_fields( qw/es_iid/ );
     }
     else {
@@ -270,7 +286,7 @@ sub getTransactions($;%) {
     	
     	$self->{_C}->form_with_fields( qw/fileKey token/ );
     }
-  
+    
     $self->{_C}->click_button(value => 'Confirm');
     
     return $self->{_C}->content();
@@ -292,6 +308,33 @@ sub dump() {
 	open FILE, ">$filename";
 	print FILE $self->{_C}->content;
 	close FILE;
+}
+
+1;
+
+package InternetBanking::HSBC::UK::Personal::Exception;
+
+use strict;
+use warnings;
+
+use constant MISSING_AUTH => 'Please provide user id, date of birth and secret';
+use constant FAILED_AUTH => 'Authentication failed, please check the provided details are correct';
+use constant FAILED_LOGIN => 'Failed to login to the internet banking service';
+use constant FAILED_WEB_CONNECTION => 'Failed to connect to the internet banking service - please verify your internet connection and try again later';
+use constant UNKNOWN => 'An unknown error occurred';
+
+sub new($) {
+	my ($class, $msg) = @_;
+	
+	my $self->{_MSG} = $msg;
+	
+	return bless($self, $class);
+}
+
+sub getMessage() {
+	my ($self) = @_;
+	
+	return $self->{_MSG};
 }
 
 1;

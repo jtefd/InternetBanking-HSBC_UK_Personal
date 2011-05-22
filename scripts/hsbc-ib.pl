@@ -149,6 +149,10 @@ if ($opts{'help'}) {
 	pod2usage(-verbose => 1, -exitval => 0);
 }
 
+unless ($opts{'show-accounts'} || $opts{'download-statements'}) {
+	pod2usage(-verbose => 1, -exitval => 1);
+}
+
 my $auth = LoadUserAuth();
 
 unless ($opts{'id'}) {
@@ -182,50 +186,60 @@ if ($opts{'save-auth'}) {
 	PersistUserAuth($opts{'id'}, $opts{'dob'}, $opts{'secret'});
 }
 
-my $ib = InternetBanking::HSBC::UK::Personal->new(
-    id => $opts{'id'}, dob => $opts{'dob'}, secret => $opts{'secret'}
-);
-
-$ib->login();
-
-if ($opts{'show-accounts'}) {
-	my $accounts = $ib->getAccounts();
+eval {
+	my $ib = InternetBanking::HSBC::UK::Personal->new(
+  	  id => $opts{'id'}, dob => $opts{'dob'}, secret => $opts{'secret'}
+	);
 	
-	while (my ($k, $acc) = each %{$accounts}) {
-        printf("%s\t%s\t%s\n", $acc->{_ACCOUNT_NUMBER}, $acc->{_NAME}, $acc->{_BALANCE});
-    }
-}
-elsif ($opts{'download-statements'}) {
-	unless ($opts{'format'}) {
-		$opts{'format'} = 'qif';
-	}
+	$ib->login();
 	
-    my $accounts = $ib->getAccounts();
-    
-	while (my ($k, $acc) = each %{$accounts}) {
-		my $flag;
+	if ($opts{'show-accounts'}) {
+		my $accounts = $ib->getAccounts();
 		
-		if ($opts{'account'}) {
-			if ($opts{'account'} eq $k) {
+		while (my ($k, $acc) = each %{$accounts}) {
+	        printf("%s\t%s\t%s\n", $acc->{_ACCOUNT_NUMBER}, $acc->{_NAME}, $acc->{_BALANCE});
+	    }
+	}
+	elsif ($opts{'download-statements'}) {
+		unless ($opts{'format'}) {
+			$opts{'format'} = 'qif';
+		}
+		
+	    my $accounts = $ib->getAccounts();
+	    
+		while (my ($k, $acc) = each %{$accounts}) {
+			my $flag;
+			
+			if ($opts{'account'}) {
+				if ($opts{'account'} eq $k) {
+					$flag = 1;
+				}
+			}
+			else {
 				$flag = 1;
 			}
-		}
-		else {
-			$flag = 1;
-		}
-		
-		if ($flag) {
-            my $filename = sprintf('%s_%s', $k, time);
-            
-            my $txns = $ib->getTransactions($acc, format => $opts{'format'});
+			
+			if ($flag) {
+	            my $filename = sprintf('%s_%s', $k, time);
+	            
+	            my $txns = $ib->getTransactions($acc, format => $opts{'format'});
+	
+	            if ($txns) {
+	                open FILE, '>' . $filename . '.' . $opts{'format'};
+	                print FILE $txns;
+	                close FILE;	
+	            }
+			} 
+	    }
+	}
+	
+	$ib->logoff();
 
-            if ($txns) {
-                open FILE, '>' . $filename . '.' . $opts{'format'};
-                print FILE $txns;
-                close FILE;	
-            }
-		} 
-    }
-}
-
-$ib->logoff();
+} or do {
+	if ($@->isa(qw/InternetBanking::HSBC::UK::Personal::Exception/)) {
+		print STDERR $@->getMessage();
+	}
+	else {
+		printf(STDERR "The requested operation failed to complete:\n\n%s", $@);
+	}
+};
