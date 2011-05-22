@@ -42,23 +42,22 @@ sub login() {
     $self->{_C} = WWW::Mechanize->new();
     $self->{_C}->agent_alias('Linux Mozilla');
     
-    # Get start page
-    unless ($self->{_C}->get(WEBAPP_URL)) {
-        confess InternetBanking::HSBC::UK::Personal::Exception->new(
+    eval {
+    	# Get start page 
+    	$self->{_C}->get(WEBAPP_URL)->is_success() or die;
+    } or do {
+    	confess InternetBanking::HSBC::UK::Personal::Exception->new(
 			InternetBanking::HSBC::UK::Personal::Exception->FAILED_WEB_CONNECTION
 		);
-    }
+    };
     
     # Get Internet Banking login page
     $self->{_C}->follow_link(text => 'Log on');
 
-    # Get Internet Banking security page for user
+	# Get Internet Banking security page for user
     $self->{_C}->form_id('logonForm');
-    $self->{_C}->field('userid', $self->{_USERID});
-    
-    unless ($self->{_C}->click()) {
-        confess 'FAILED OPENING ACCOUNT SECURITY PAGE';
-    }
+    $self->{_C}->field('userid', $self->{_USERID});	
+    $self->{_C}->click();
     
     # Determine required digits of secret 
     my $root = HTML::TreeBuilder->new_from_content($self->{_C}->response->decoded_content);
@@ -93,9 +92,7 @@ sub login() {
     }
 
     unless (scalar(@pass) == 3) {
-        confess InternetBanking::HSBC::UK::Personal::Exception->new(
-			InternetBanking::HSBC::UK::Personal::Exception->UNKNOWN_EXCEPTION
-		);
+        die;
     }
        
     $self->{_C}->form_with_fields( qw/password memorableAnswer/ );
@@ -187,109 +184,111 @@ sub getAccounts() {
 sub getTransactions($;%) {
 	my ($self, $account, %opts) = @_;
 	
-	my $cc_account;
+	eval {
+		my $cc_account;
 	
-	if ($account->{_FORM_DATA}->{_INPUTS}->{'productType'} && $account->{_FORM_DATA}->{_INPUTS}->{'productType'} eq 'CCA') {
-		$cc_account = 1;
-	}
-    
-    my $acc_url = sprintf(
-        '%s://%s%s',
-        $self->{_C}->uri()->scheme(),
-        $self->{_C}->uri()->host(),
-        $account->{_FORM_DATA}->{_PATH}
-    );
-	
-	$self->{_C}->post($acc_url, $account->{_FORM_DATA}->{_INPUTS});
-	
-	my $html = HTML::TreeBuilder->new_from_content($self->{_C}->content);
-	
-	unless ($cc_account) {
-		my ($fd, $fm, $fy) = ();
-	
-		foreach ($html->look_down('_tag', 'div', 'class', 'extPibRow hsbcRow')) {
-			foreach ($_->look_down('_tag', 'p')) {
-				if (($fd, $fm, $fy) = ($_->as_trimmed_text() =~ /The earliest date you can view is.+(\d{2}) (\w{3}) (\d{4})\./)) {
-					last;
+		if ($account->{_FORM_DATA}->{_INPUTS}->{'productType'} && $account->{_FORM_DATA}->{_INPUTS}->{'productType'} eq 'CCA') {
+			$cc_account = 1;
+		}
+	    
+	    my $acc_url = sprintf(
+	        '%s://%s%s',
+	        $self->{_C}->uri()->scheme(),
+	        $self->{_C}->uri()->host(),
+	        $account->{_FORM_DATA}->{_PATH}
+	    );
+		
+		$self->{_C}->post($acc_url, $account->{_FORM_DATA}->{_INPUTS});
+		
+		my $html = HTML::TreeBuilder->new_from_content($self->{_C}->content);
+		
+		unless ($cc_account) {
+			my ($fd, $fm, $fy) = ();
+		
+			foreach ($html->look_down('_tag', 'div', 'class', 'extPibRow hsbcRow')) {
+				foreach ($_->look_down('_tag', 'p')) {
+					if (($fd, $fm, $fy) = ($_->as_trimmed_text() =~ /The earliest date you can view is.+(\d{2}) (\w{3}) (\d{4})\./)) {
+						last;
+					}
 				}
 			}
+			
+			my %date_map = (
+			   Jan => '01',
+			   Feb => '02',
+			   Mar => '03',
+			   Apr => '04',
+			   May => '05',
+			   Jun => '06',
+			   Jul => '07',
+			   Aug => '08',
+			   Sep => '09',
+			   Oct => '10',
+			   Nov => '11',
+			   Dec => '12'
+			);
+			
+			$fm = $date_map{$fm};
+	    
+	        my ($td, $tm, $ty) = split(' ', strftime('%d %m %Y', localtime));
+	        
+	        $self->{_C}->submit_form(
+	            with_fields => {
+	                fromDateDay => $fd,
+	                fromDateMonth => $fm,
+	                fromDateYear => $fy,
+	                toDateDay => $td,
+	                toDateMonth => $tm,
+	                toDateYear => $ty
+	            }
+	        );
 		}
 		
-		my %date_map = (
-		   Jan => '01',
-		   Feb => '02',
-		   Mar => '03',
-		   Apr => '04',
-		   May => '05',
-		   Jun => '06',
-		   Jul => '07',
-		   Aug => '08',
-		   Sep => '09',
-		   Oct => '10',
-		   Nov => '11',
-		   Dec => '12'
-		);
-		
-		$fm = $date_map{$fm};
-    
-        my ($td, $tm, $ty) = split(' ', strftime('%d %m %Y', localtime));
-        
-        $self->{_C}->submit_form(
-            with_fields => {
-                fromDateDay => $fd,
-                fromDateMonth => $fm,
-                fromDateYear => $fy,
-                toDateDay => $td,
-                toDateMonth => $tm,
-                toDateYear => $ty
-            }
-        );
-	}
-	
-    $self->{_C}->follow_link(text => 'Download transactions');
-    
-    my %formats = ();
-    
-    if ($cc_account) {
-    	%formats = (
-        	csv => 'CSV1',
-        	qif => 'QIF2'
-    	);
-    }
-    else {
-    	%formats = (
-        	csv => 'S_Text',
-        	qif => 'Q_QIF'
-    	);
-    } 
-    
-    my $format = $formats{'csv'};
-    
-    if ($opts{'format'} && $formats{lc($opts{'format'})}) {
-    	$format = $formats{lc($opts{'format'})};
-    }
-    
-    if ($cc_account) {
-    	$self->{_C}->form_with_fields( qw/formats transactionPeriodSelected es_iid/ );
-    	$self->{_C}->field('formats', $format);
-    	$self->{_C}->field('transactionPeriodSelected', 'CURRENTPERIOD');
-    	$self->{_C}->click();
-  
-    	$self->{_C}->form_with_fields( qw/es_iid/ );
-    }
-    else {
-		$self->{_C}->submit_form(
-       		with_fields => {
-           		downloadType => $format
-       		}
-    	);
-    	
-    	$self->{_C}->form_with_fields( qw/fileKey token/ );
-    }
-    
-    $self->{_C}->click_button(value => 'Confirm');
-    
-    return $self->{_C}->content();
+	    $self->{_C}->follow_link(text => 'Download transactions');
+	    
+	    my %formats = ();
+	    
+	    if ($cc_account) {
+	    	%formats = (
+	        	csv => 'CSV1',
+	        	qif => 'QIF2'
+	    	);
+	    }
+	    else {
+	    	%formats = (
+	        	csv => 'S_Text',
+	        	qif => 'Q_QIF'
+	    	);
+	    } 
+	    
+	    my $format = $formats{'csv'};
+	    
+	    if ($opts{'format'} && $formats{lc($opts{'format'})}) {
+	    	$format = $formats{lc($opts{'format'})};
+	    }
+	    
+	    if ($cc_account) {
+	    	$self->{_C}->form_with_fields( qw/formats transactionPeriodSelected es_iid/ );
+	    	$self->{_C}->field('formats', $format);
+	    	$self->{_C}->field('transactionPeriodSelected', 'CURRENTPERIOD');
+	    	$self->{_C}->click();
+	  
+	    	$self->{_C}->form_with_fields( qw/es_iid/ );
+	    }
+	    else {
+			$self->{_C}->submit_form(
+	       		with_fields => {
+	           		downloadType => $format
+	       		}
+	    	);
+	    	
+	    	$self->{_C}->form_with_fields( qw/fileKey token/ );
+	    }
+	    
+	    $self->{_C}->click_button(value => 'Confirm');
+	    
+	    return $self->{_C}->content();
+	} or return undef;
 }
 
 sub logoff() {
