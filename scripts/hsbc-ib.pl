@@ -202,7 +202,7 @@ eval {
 	}
 	elsif ($opts{'download-statements'}) {
 		unless ($opts{'format'}) {
-			$opts{'format'} = 'qif';
+			$opts{'format'} = 'csv';
 		}
 		
 	    my $accounts = $ib->getAccounts();
@@ -234,7 +234,6 @@ eval {
 	}
 	
 	$ib->logoff();
-
 } or do {
 	if ($@->isa(qw/InternetBanking::HSBC::UK::Personal::Exception/)) {
 		print STDERR $@->getMessage();
